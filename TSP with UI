@@ -1,0 +1,183 @@
+import sys
+from functools import lru_cache
+import numpy as np
+
+def get_user_input():
+    """
+    Get user input for the TSP problem
+    Returns:
+        tuple: (distance_matrix, num_cities)
+    """
+    print("\nTraveling Salesman Problem (TSP) - Dynamic Programming Solution")
+    print("-----------------------------------------------------------")
+    
+    while True:
+        try:
+            print("\nChoose input method:")
+            print("1. Enter distance matrix manually")
+            print("2. Generate random cities with Euclidean distances")
+            choice = int(input("Enter your choice (1 or 2): "))
+            
+            if choice == 1:
+                n = int(input("\nEnter number of cities (max 15 for reasonable performance): "))
+                if n > 20:
+                    print("Warning: For n > 15, computation may take very long!")
+                    continue
+                
+                print(f"\nEnter {n}x{n} distance matrix (separate values with spaces, rows on new lines):")
+                print("Example for 3 cities:")
+                print("0 10 15")
+                print("10 0 20")
+                print("15 20 0")
+                
+                distances = []
+                for i in range(n):
+                    while True:
+                        row = input(f"Row {i+1}: ").strip().split()
+                        if len(row) != n:
+                            print(f"Error: Expected {n} values, got {len(row)}")
+                            continue
+                        try:
+                            row = [float(x) for x in row]
+                            distances.append(row)
+                            break
+                        except ValueError:
+                            print("Error: Please enter numeric values only")
+                
+                # Validate matrix
+                for i in range(n):
+                    if distances[i][i] != 0:
+                        print("Warning: Diagonal elements (distance from city to itself) should be 0")
+                
+                return distances, n
+            
+            elif choice == 2:
+                n = int(input("\nEnter number of cities (max 15 for reasonable performance): "))
+                if n > 20:
+                    print("Warning: For n > 15, computation may take very long!")
+                    continue
+                
+                # Generate random city coordinates
+                np.random.seed(42)  # For reproducibility
+                coords = np.random.rand(n, 2) * 100  # Random coordinates in [0,100] range
+                
+                # Calculate Euclidean distances
+                distances = np.zeros((n, n))
+                for i in range(n):
+                    for j in range(n):
+                        if i != j:
+                            dx = coords[i][0] - coords[j][0]
+                            dy = coords[i][1] - coords[j][1]
+                            distances[i][j] = np.sqrt(dx*dx + dy*dy)
+                
+                print("\nGenerated cities with the following coordinates:")
+                for i in range(n):
+                    print(f"City {i}: ({coords[i][0]:.2f}, {coords[i][1]:.2f})")
+                
+                return distances.tolist(), n
+            
+            else:
+                print("Invalid choice. Please enter 1 or 2")
+        
+        except ValueError:
+            print("Invalid input. Please enter a valid number")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled by user")
+            sys.exit(0)
+
+def tsp_dp_solver(distances, n):
+    """
+    Solve TSP using dynamic programming (Held-Karp algorithm)
+    
+    Args:
+        distances: 2D list of distances between cities
+        n: Number of cities
+    Returns:
+        tuple: (min_distance, optimal_path)
+    """
+    # Memoization table
+    memo = {}
+    
+    # Helper function with memoization
+    def dp(current, visited):
+        if (current, visited) in memo:
+            return memo[(current, visited)]
+        
+        # Base case: all cities visited, return to start
+        if visited == (1 << n) - 1:
+            return distances[current][0]
+        
+        min_dist = float('inf')
+        for city in range(n):
+            if not (visited & (1 << city)):
+                new_visited = visited | (1 << city)
+                dist = distances[current][city] + dp(city, new_visited)
+                if dist < min_dist:
+                    min_dist = dist
+        
+        memo[(current, visited)] = min_dist
+        return min_dist
+    
+    # Reconstruct the path
+    def reconstruct_path():
+        visited = 1 << 0  # Start with city 0 visited
+        path = [0]
+        current = 0
+        
+        for _ in range(n - 1):
+            next_city = None
+            min_dist = float('inf')
+            
+            for city in range(n):
+                if not (visited & (1 << city)):
+                    dist = distances[current][city] + dp(city, visited | (1 << city))
+                    if dist < min_dist:
+                        min_dist = dist
+                        next_city = city
+            
+            path.append(next_city)
+            visited |= 1 << next_city
+            current = next_city
+        
+        path.append(0)  # Return to start
+        return path
+    
+    min_distance = dp(0, 1 << 0)
+    optimal_path = reconstruct_path()
+    
+    return min_distance, optimal_path
+
+def print_solution(distances, min_distance, path):
+    """
+    Print the TSP solution in a readable format
+    """
+    print("\nOptimal Solution Found:")
+    print(f"Minimum travel distance: {min_distance:.2f}")
+    print("\nOptimal Route:")
+    
+    total = 0
+    for i in range(len(path) - 1):
+        from_city = path[i]
+        to_city = path[i+1]
+        dist = distances[from_city][to_city]
+        total += dist
+        print(f"City {from_city} → City {to_city}: {dist:.2f} (Subtotal: {total:.2f})")
+    
+    print(f"\nTotal distance: {min_distance:.2f}")
+
+def main():
+    distances, n = get_user_input()
+    
+    print("\nSolving TSP using Dynamic Programming...")
+    try:
+        min_distance, path = tsp_dp_solver(distances, n)
+        print_solution(distances, min_distance, path)
+    except RecursionError:
+        print("\nError: Maximum recursion depth exceeded. Try with fewer cities.")
+    except MemoryError:
+        print("\nError: Not enough memory. Try with fewer cities.")
+    except Exception as e:
+        print(f"\nAn error occurred: {str(e)}")
+
+if __name__ == "__main__":
+    main()
